@@ -85,8 +85,7 @@ function App() {
         const formData = new FormData();
         formData.append('file', acceptedFiles[0]);
         try {
-          const uploadUrl = 'http://localhost:8000/api/pdf/upload/';
-          console.log('Uploading to:', uploadUrl);
+          const uploadUrl = `${import.meta.env.VITE_API_URL}/api/pdf/upload/`;
           const response = await fetch(uploadUrl, {
             method: 'POST',
             body: formData
@@ -97,10 +96,38 @@ function App() {
             setIsAnalyzing(false);
             return;
           }
-          const data = await response.json();
-          setAccountInfo(mapAccountInfo(data.account_info || {}));
-          setMonthlyData(data.monthly_analysis ? Object.entries(data.monthly_analysis).map(([month, stats]) => mapMonthlyStats(month, stats)) : []);
-          setAnalytics({
+          
+          let data;
+          try {
+            const responseText = await response.text();
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            throw new Error('Failed to parse response: ' + (parseError instanceof Error ? parseError.message : String(parseError)));
+          }
+          
+          let mappedAccountInfo;
+          try {
+            mappedAccountInfo = mapAccountInfo(data.account_info || {});
+          } catch (mapError) {
+            throw new Error('Error processing account information');
+          }
+          setAccountInfo(mappedAccountInfo);
+          
+          let mappedMonthlyData;
+          try {
+            mappedMonthlyData = data.monthly_analysis ? Object.entries(data.monthly_analysis).map(([month, stats]) => {
+              try {
+                return mapMonthlyStats(month, stats);
+              } catch (e) {
+                throw new Error(`Error processing month ${month}`);
+              }
+            }) : [];
+          } catch (mapError) {
+            throw new Error('Error processing monthly data');
+          }
+          setMonthlyData(mappedMonthlyData);
+          
+          const mappedAnalytics = {
             averageFluctuation: data.analytics?.average_fluctuation,
             netCashFlowStability: data.analytics?.net_cash_flow_stability,
             totalForeignTransactions: data.analytics?.total_foreign_transactions,
@@ -111,11 +138,13 @@ function App() {
             sum_total_outflow: data.analytics?.sum_total_outflow,
             avg_total_inflow: data.analytics?.avg_total_inflow,
             avg_total_outflow: data.analytics?.avg_total_outflow,
-          });
+          };
+          setAnalytics(mappedAnalytics);
+    
           setIsAnalyzing(false);
           setShowResults(true);
         } catch (e) {
-          setError('Network or server error');
+          setError('Network or server error: ' + (e instanceof Error ? e.message : String(e)));
           setIsAnalyzing(false);
         }
       }
@@ -157,6 +186,15 @@ function App() {
               <h1 className="text-4xl font-bold text-gray-900 mb-4">LedgerLens</h1>
               <p className="text-lg text-gray-600">Automate Analyze Act</p>
             </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                <div className="flex items-center">
+                  <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+                  <p className="text-red-800 font-medium">{error}</p>
+                </div>
+              </div>
+            )}
 
             <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
               <div
