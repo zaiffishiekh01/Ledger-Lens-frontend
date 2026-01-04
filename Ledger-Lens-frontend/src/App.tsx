@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Upload, FileText, TrendingUp, TrendingDown, DollarSign, Calendar, Globe, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { useDropzone } from 'react-dropzone';
+import logo from './assets/logo.png';
 
 // Sample data for demonstration
 const sampleData = {
@@ -183,7 +184,10 @@ function App() {
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">LedgerLens</h1>
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <img src={logo} alt="LedgerLens Logo" className="h-12 w-auto" />
+                <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
+              </div>
               <p className="text-lg text-gray-600">Automate Analyze Act</p>
             </div>
 
@@ -268,9 +272,12 @@ function App() {
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="flex-1"></div>
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
-              <p className="text-sm text-gray-600 mt-1">Automate Analyze Act</p>
+            <div className="text-center flex items-center justify-center gap-3">
+              <img src={logo} alt="LedgerLens Logo" className="h-10 w-auto" />
+              <div>
+                <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
+                <p className="text-sm text-gray-600 mt-1">Automate Analyze Act</p>
+              </div>
             </div>
             <div className="flex-1 flex justify-end">
               <button 
