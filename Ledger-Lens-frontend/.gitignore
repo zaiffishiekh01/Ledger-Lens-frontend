@@ -159,7 +159,6 @@ out/
 
 # Gatsby (if ever used)
 .cache/
-public/
 
 # Vue (if ever used)
 .vuepress/dist/
