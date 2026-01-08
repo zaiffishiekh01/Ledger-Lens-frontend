@@ -158,8 +158,8 @@ function App() {
           currentPdfIdRef.current = pdfId;
           
           // Poll for results until processing is complete
-          const pollInterval = 15000; // Poll every 15 seconds
-          const maxPollAttempts = 120; // Max 30 minutes (120 * 15s)
+          const pollInterval = 30000; // Poll every 30 seconds
+          const maxPollAttempts = 120; // Max 1 hour (120 * 30s)
           let pollAttempts = 0;
           
           const pollForResults = async (): Promise<void> => {
