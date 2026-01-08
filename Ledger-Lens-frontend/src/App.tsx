@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, TrendingUp, TrendingDown, DollarSign, Calendar, Globe, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { useDropzone } from 'react-dropzone';
@@ -72,6 +72,39 @@ function App() {
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Refs for timer cleanup (memory leak fix)
+  const pollTimeoutRef = useRef<number | null>(null);
+  const currentPdfIdRef = useRef<number | null>(null);
+
+  // Cleanup function for timers (memory leak fix)
+  const clearPolling = () => {
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+    currentPdfIdRef.current = null;
+  };
+
+  // Cleanup only when browser/tab is actually closing (not on component unmount)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      clearPolling();
+    };
+
+    // Listen for browser/tab closing
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Also listen for pagehide (more reliable for mobile browsers)
+    window.addEventListener('pagehide', handleBeforeUnload);
+
+    return () => {
+      // Remove listeners when component unmounts, but DON'T clear polling
+      // This allows polling to continue even when user navigates away
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -79,6 +112,9 @@ function App() {
     },
     onDrop: async (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
+        // Race condition fix: Cancel previous poll if exists
+        clearPolling();
+        
         setUploadedFile(acceptedFiles[0]);
         setIsAnalyzing(true);
         setError(null);
@@ -92,61 +128,144 @@ function App() {
             body: formData
           });
           if (!response.ok) {
-            const err = await response.json();
-            setError(err.error || 'Failed to process PDF');
+            // Error parsing fix: Handle non-JSON errors
+            let err;
+            try {
+              err = await response.json();
+            } catch {
+              err = { error: `Server error: ${response.status} ${response.statusText}` };
+            }
+            setError(err.error || 'Failed to upload PDF');
             setIsAnalyzing(false);
             return;
           }
           
-          let data;
+          let uploadData;
           try {
             const responseText = await response.text();
-            data = JSON.parse(responseText);
+            uploadData = JSON.parse(responseText);
           } catch (parseError) {
-            throw new Error('Failed to parse response: ' + (parseError instanceof Error ? parseError.message : String(parseError)));
+            throw new Error('Failed to parse upload response: ' + (parseError instanceof Error ? parseError.message : String(parseError)));
           }
           
-          let mappedAccountInfo;
-          try {
-            mappedAccountInfo = mapAccountInfo(data.account_info || {});
-          } catch (mapError) {
-            throw new Error('Error processing account information');
+          // Get PDF ID from upload response
+          const pdfId = uploadData.id;
+          if (!pdfId) {
+            throw new Error('No PDF ID returned from server');
           }
-          setAccountInfo(mappedAccountInfo);
           
-          let mappedMonthlyData;
-          try {
-            mappedMonthlyData = data.monthly_analysis ? Object.entries(data.monthly_analysis).map(([month, stats]) => {
-              try {
-                return mapMonthlyStats(month, stats);
-              } catch (e) {
-                throw new Error(`Error processing month ${month}`);
+          // Store current PDF ID (race condition fix)
+          currentPdfIdRef.current = pdfId;
+          
+          // Poll for results until processing is complete
+          const pollInterval = 15000; // Poll every 15 seconds
+          const maxPollAttempts = 120; // Max 30 minutes (120 * 15s)
+          let pollAttempts = 0;
+          
+          const pollForResults = async (): Promise<void> => {
+            // Race condition fix: Check if this is still the current PDF
+            if (currentPdfIdRef.current !== pdfId) {
+              return; // New upload started, stop this poll
+            }
+            
+            try {
+              const resultsUrl = `${import.meta.env.VITE_API_URL}/api/pdf/results/${pdfId}/`;
+              const resultsResponse = await fetch(resultsUrl);
+              
+              if (!resultsResponse.ok) {
+                throw new Error('Failed to fetch processing status');
               }
-            }) : [];
-          } catch (mapError) {
-            throw new Error('Error processing monthly data');
-          }
-          setMonthlyData(mappedMonthlyData);
-          
-          const mappedAnalytics = {
-            averageFluctuation: data.analytics?.average_fluctuation,
-            netCashFlowStability: data.analytics?.net_cash_flow_stability,
-            totalForeignTransactions: data.analytics?.total_foreign_transactions,
-            totalForeignAmount: data.analytics?.total_foreign_amount,
-            overdraftFrequency: data.analytics?.overdraft_frequency,
-            overdraftTotalDays: data.analytics?.overdraft_total_days,
-            sum_total_inflow: data.analytics?.sum_total_inflow,
-            sum_total_outflow: data.analytics?.sum_total_outflow,
-            avg_total_inflow: data.analytics?.avg_total_inflow,
-            avg_total_outflow: data.analytics?.avg_total_outflow,
+              
+              const resultsData = await resultsResponse.json();
+              
+              // Race condition fix: Check again after async operation
+              if (currentPdfIdRef.current !== pdfId) {
+                return; // New upload started, stop this poll
+              }
+              
+              // Check status
+              if (resultsData.status === 'error') {
+                setError(resultsData.error || 'Error processing PDF');
+                setIsAnalyzing(false);
+                clearPolling();
+                return;
+              }
+              
+              if (resultsData.status === 'processing') {
+                pollAttempts++;
+                if (pollAttempts >= maxPollAttempts) {
+                  throw new Error('Processing timeout. Please try again later.');
+                }
+                // Continue polling (memory leak fix: store timeout ID)
+                pollTimeoutRef.current = setTimeout(pollForResults, pollInterval);
+                return;
+              }
+              
+              if (resultsData.status === 'completed') {
+                // Race condition fix: Final check
+                if (currentPdfIdRef.current !== pdfId) {
+                  return; // New upload started, ignore these results
+                }
+                
+                // Processing complete, extract data
+                let mappedAccountInfo;
+                try {
+                  mappedAccountInfo = mapAccountInfo(resultsData.account_info || {});
+                } catch (mapError) {
+                  throw new Error('Error processing account information');
+                }
+                setAccountInfo(mappedAccountInfo);
+                
+                let mappedMonthlyData;
+                try {
+                  mappedMonthlyData = resultsData.monthly_analysis ? Object.entries(resultsData.monthly_analysis).map(([month, stats]) => {
+                    try {
+                      return mapMonthlyStats(month, stats);
+                    } catch (e) {
+                      throw new Error(`Error processing month ${month}`);
+                    }
+                  }) : [];
+                } catch (mapError) {
+                  throw new Error('Error processing monthly data');
+                }
+                setMonthlyData(mappedMonthlyData);
+                
+                const mappedAnalytics = {
+                  averageFluctuation: resultsData.analytics?.average_fluctuation,
+                  netCashFlowStability: resultsData.analytics?.net_cash_flow_stability,
+                  totalForeignTransactions: resultsData.analytics?.total_foreign_transactions,
+                  totalForeignAmount: resultsData.analytics?.total_foreign_amount,
+                  overdraftFrequency: resultsData.analytics?.overdraft_frequency,
+                  overdraftTotalDays: resultsData.analytics?.overdraft_total_days,
+                  sum_total_inflow: resultsData.analytics?.sum_total_inflow,
+                  sum_total_outflow: resultsData.analytics?.sum_total_outflow,
+                  avg_total_inflow: resultsData.analytics?.avg_total_inflow,
+                  avg_total_outflow: resultsData.analytics?.avg_total_outflow,
+                };
+                setAnalytics(mappedAnalytics);
+                
+                setIsAnalyzing(false);
+                setShowResults(true);
+                clearPolling();
+                return;
+              }
+            } catch (pollError) {
+              // Race condition fix: Check if this is still the current PDF
+              if (currentPdfIdRef.current !== pdfId) {
+                return; // New upload started, ignore this error
+              }
+              setError('Error checking processing status: ' + (pollError instanceof Error ? pollError.message : String(pollError)));
+              setIsAnalyzing(false);
+              clearPolling();
+            }
           };
-          setAnalytics(mappedAnalytics);
-    
-          setIsAnalyzing(false);
-          setShowResults(true);
+          
+          // Start polling (memory leak fix: store timeout ID)
+          pollTimeoutRef.current = setTimeout(pollForResults, pollInterval);
         } catch (e) {
           setError('Network or server error: ' + (e instanceof Error ? e.message : String(e)));
           setIsAnalyzing(false);
+          clearPolling();
         }
       }
     },
