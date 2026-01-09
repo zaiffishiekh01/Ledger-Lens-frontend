@@ -1,38 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, TrendingUp, TrendingDown, DollarSign, Calendar, Globe, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { useDropzone } from 'react-dropzone';
 import logo from './assets/logo.png';
-
-// Sample data for demonstration
-const sampleData = {
-  accountInfo: {
-    customerName: "John Smith",
-    accountNumber: "ACC-2024-001",
-    ibanNumber: "GB29 NWBK 6016 1331 9268 19",
-    openingBalance: 15750.00,
-    closingBalance: 18420.50,
-    financialPeriod: "Jan 2024 - Dec 2024",
-    pagesProcessed: 156,
-    totalTransactions: 2847
-  },
-  monthlyData: [
-    { month: 'Jan', openingBalance: 15750, closingBalance: 16200, inflows: 8500, outflows: 8050, netChange: 450, fluctuation: 1200, foreignTxns: 12, foreignAmount: 2400, minBalance: 14800, overdraftDays: 0 },
-    { month: 'Feb', openingBalance: 16200, closingBalance: 15950, inflows: 7800, outflows: 8050, netChange: -250, fluctuation: 1100, foreignTxns: 8, foreignAmount: 1600, minBalance: 15200, overdraftDays: 0 },
-    { month: 'Mar', openingBalance: 15950, closingBalance: 17100, inflows: 9200, outflows: 8050, netChange: 1150, fluctuation: 1400, foreignTxns: 15, foreignAmount: 3200, minBalance: 15100, overdraftDays: 0 },
-    { month: 'Apr', openingBalance: 17100, closingBalance: 16800, inflows: 8100, outflows: 8400, netChange: -300, fluctuation: 900, foreignTxns: 6, foreignAmount: 980, minBalance: 16200, overdraftDays: 0 },
-    { month: 'May', openingBalance: 16800, closingBalance: 18200, inflows: 9800, outflows: 8400, netChange: 1400, fluctuation: 1600, foreignTxns: 18, foreignAmount: 4100, minBalance: 16200, overdraftDays: 0 },
-    { month: 'Jun', openingBalance: 18200, closingBalance: 17900, inflows: 8600, outflows: 8900, netChange: -300, fluctuation: 1300, foreignTxns: 11, foreignAmount: 2200, minBalance: 17200, overdraftDays: 0 }
-  ],
-  analytics: {
-    averageFluctuation: 1250,
-    netCashFlowStability: 85.2,
-    totalForeignTransactions: 70,
-    totalForeignAmount: 14480,
-    overdraftFrequency: 2,
-    overdraftTotalDays: 8
-  }
-};
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
@@ -158,9 +128,11 @@ function App() {
           currentPdfIdRef.current = pdfId;
           
           // Poll for results until processing is complete
-          const pollInterval = 30000; // Poll every 30 seconds
-          const maxPollAttempts = 120; // Max 1 hour (120 * 30s)
-          let pollAttempts = 0;
+          const initialPollInterval = 60000; // Start at 60 seconds
+          const backoffMultiplier = 1.5; // Increase by 50% each time
+          const maxPollTime = 10800000; // Max 3 hours total
+          let pollInterval = initialPollInterval;
+          let totalPollTime = 0;
           
           const pollForResults = async (): Promise<void> => {
             // Race condition fix: Check if this is still the current PDF
@@ -192,12 +164,20 @@ function App() {
               }
               
               if (resultsData.status === 'processing') {
-                pollAttempts++;
-                if (pollAttempts >= maxPollAttempts) {
+                totalPollTime += pollInterval;
+                if (totalPollTime >= maxPollTime) {
+                  // Call backend to stop processing and delete PDF
+                  try {
+                    const stopUrl = `${import.meta.env.VITE_API_URL}/api/pdf/stop/${pdfId}/`;
+                    await fetch(stopUrl, { method: 'POST' });
+                  } catch (stopError) {
+                    // Ignore stop errors
+                  }
                   throw new Error('Processing timeout. Please try again later.');
                 }
-                // Continue polling (memory leak fix: store timeout ID)
+                // Continue polling with exponential backoff
                 pollTimeoutRef.current = setTimeout(pollForResults, pollInterval);
+                pollInterval = Math.floor(pollInterval * backoffMultiplier); // Increase by 50%
                 return;
               }
               
@@ -590,7 +570,7 @@ function App() {
                       fill="#8884d8"
                       dataKey="foreignTxns"
                     >
-                      {monthlyData.map((entry, index) => (
+                      {monthlyData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
