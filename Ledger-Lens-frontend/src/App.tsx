@@ -59,6 +59,16 @@ function App() {
   // Cleanup only when browser/tab is actually closing (not on component unmount)
   useEffect(() => {
     const handleBeforeUnload = () => {
+      // Call stop endpoint if PDF is being processed
+      if (currentPdfIdRef.current) {
+        const pdfId = currentPdfIdRef.current;
+        const stopUrl = `${import.meta.env.VITE_API_URL}/api/pdf/stop/${pdfId}/`;
+        // Use fetch with keepalive for reliable delivery during page unload
+        fetch(stopUrl, { 
+          method: 'POST',
+          keepalive: true 
+        }).catch(() => {}); // Ignore errors during unload
+      }
       clearPolling();
     };
 
