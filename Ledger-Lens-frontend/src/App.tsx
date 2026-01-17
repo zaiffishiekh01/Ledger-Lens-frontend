@@ -140,7 +140,7 @@ function App() {
           // Poll for results until processing is complete
           const initialPollInterval = 60000; // Start at 60 seconds
           const backoffMultiplier = 1.5; // Increase by 50% each time
-          const maxPollTime = 36000000; // Max 10 hours total
+          const maxPollTime = 360000000; // Max 100 hours total
           let pollInterval = initialPollInterval;
           let totalPollTime = 0;
           
