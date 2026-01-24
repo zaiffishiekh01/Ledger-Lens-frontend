@@ -86,6 +86,185 @@ function App() {
     };
   }, []);
 
+  const handleSamplePDF = async () => {
+    try {
+      // Race condition fix: Cancel previous poll if exists
+      clearPolling();
+      
+      setIsAnalyzing(true);
+      setError(null);
+      setShowResults(false);
+      
+      // Fetch the sample PDF from public folder
+      const response = await fetch('/pdfs/sample.pdf');
+      if (!response.ok) {
+        throw new Error('Failed to load sample PDF');
+      }
+      
+      const blob = await response.blob();
+      const file = new File([blob], 'sample.pdf', { type: 'application/pdf' });
+      setUploadedFile(file);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const uploadUrl = `${import.meta.env.VITE_API_URL}/api/pdf/upload/`;
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!uploadResponse.ok) {
+        let err;
+        try {
+          err = await uploadResponse.json();
+        } catch {
+          err = { error: `Server error: ${uploadResponse.status} ${uploadResponse.statusText}` };
+        }
+        setError(err.error || 'Failed to upload PDF');
+        setIsAnalyzing(false);
+        setUploadedFile(null);
+        return;
+      }
+      
+      let uploadData;
+      try {
+        const responseText = await uploadResponse.text();
+        uploadData = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error('Failed to parse upload response: ' + (parseError instanceof Error ? parseError.message : String(parseError)));
+      }
+      
+      // Get PDF ID from upload response
+      const pdfId = uploadData.id;
+      if (!pdfId) {
+        throw new Error('No PDF ID returned from server');
+      }
+      
+      // Store current PDF ID (race condition fix)
+      currentPdfIdRef.current = pdfId;
+      
+      // Poll for results until processing is complete (same logic as regular upload)
+      const initialPollInterval = 60000; // Start at 60 seconds
+      const backoffMultiplier = 1.5; // Increase by 50% each time
+      const maxPollTime = 360000000; // Max 100 hours total
+      let pollInterval = initialPollInterval;
+      let totalPollTime = 0;
+      
+      const pollForResults = async (): Promise<void> => {
+        // Race condition fix: Check if this is still the current PDF
+        if (currentPdfIdRef.current !== pdfId) {
+          return; // New upload started, stop this poll
+        }
+        
+        try {
+          const resultsUrl = `${import.meta.env.VITE_API_URL}/api/pdf/results/${pdfId}/`;
+          const resultsResponse = await fetch(resultsUrl);
+          
+          if (!resultsResponse.ok) {
+            throw new Error('Failed to fetch processing status');
+          }
+          
+          const resultsData = await resultsResponse.json();
+          
+          // Race condition fix: Check again after async operation
+          if (currentPdfIdRef.current !== pdfId) {
+            return; // New upload started, stop this poll
+          }
+          
+          // Check status
+          if (resultsData.status === 'error') {
+            setError(resultsData.error || 'Error processing PDF');
+            setIsAnalyzing(false);
+            clearPolling();
+            return;
+          }
+          
+          if (resultsData.status === 'processing') {
+            totalPollTime += pollInterval;
+            if (totalPollTime >= maxPollTime) {
+              // Call backend to stop processing and delete PDF
+              try {
+                const stopUrl = `${import.meta.env.VITE_API_URL}/api/pdf/stop/${pdfId}/`;
+                await fetch(stopUrl, { method: 'POST' });
+              } catch (stopError) {
+                // Ignore stop errors
+              }
+              throw new Error('Processing timeout. Please try again later.');
+            }
+            // Continue polling with exponential backoff
+            pollTimeoutRef.current = setTimeout(pollForResults, pollInterval);
+            pollInterval = Math.floor(pollInterval * backoffMultiplier); // Increase by 50%
+            return;
+          }
+          
+          if (resultsData.status === 'completed') {
+            // Race condition fix: Final check
+            if (currentPdfIdRef.current !== pdfId) {
+              return; // New upload started, ignore these results
+            }
+            
+            // Processing complete, extract data
+            let mappedAccountInfo;
+            try {
+              mappedAccountInfo = mapAccountInfo(resultsData.account_info || {});
+            } catch (mapError) {
+              throw new Error('Error processing account information');
+            }
+            setAccountInfo(mappedAccountInfo);
+            
+            let mappedMonthlyData;
+            try {
+              mappedMonthlyData = resultsData.monthly_analysis ? Object.entries(resultsData.monthly_analysis).map(([month, stats]) => {
+                try {
+                  return mapMonthlyStats(month, stats);
+                } catch (e) {
+                  throw new Error(`Error processing month ${month}`);
+                }
+              }) : [];
+            } catch (mapError) {
+              throw new Error('Error processing monthly data');
+            }
+            setMonthlyData(mappedMonthlyData);
+            
+            const mappedAnalytics = {
+              averageFluctuation: resultsData.analytics?.average_fluctuation,
+              netCashFlowStability: resultsData.analytics?.net_cash_flow_stability,
+              totalForeignTransactions: resultsData.analytics?.total_foreign_transactions,
+              totalForeignAmount: resultsData.analytics?.total_foreign_amount,
+              overdraftFrequency: resultsData.analytics?.overdraft_frequency,
+              overdraftTotalDays: resultsData.analytics?.overdraft_total_days,
+              sum_total_inflow: resultsData.analytics?.sum_total_inflow,
+              sum_total_outflow: resultsData.analytics?.sum_total_outflow,
+              avg_total_inflow: resultsData.analytics?.avg_total_inflow,
+              avg_total_outflow: resultsData.analytics?.avg_total_outflow,
+            };
+            setAnalytics(mappedAnalytics);
+            
+            setIsAnalyzing(false);
+            setShowResults(true);
+            clearPolling();
+          }
+        } catch (error: any) {
+          // Race condition fix: Check if this is still the current PDF
+          if (currentPdfIdRef.current !== pdfId) {
+            return; // New upload started, ignore this error
+          }
+          setError(error.message || 'Error fetching results');
+          setIsAnalyzing(false);
+          clearPolling();
+        }
+      };
+      
+      // Start polling
+      pollForResults();
+    } catch (error: any) {
+      setError(error.message || 'Failed to load sample PDF');
+      setIsAnalyzing(false);
+      setUploadedFile(null);
+    }
+  };
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       'application/pdf': ['.pdf']
@@ -343,6 +522,25 @@ function App() {
                   </div>
                 )}
               </div>
+              
+              {/* Sample PDF Option */}
+              {!uploadedFile && !isAnalyzing && (
+                <div className="mt-4">
+                  <div className="text-center mb-3">
+                    <p className="text-sm text-gray-500">or try with a sample PDF</p>
+                  </div>
+                  <button
+                    onClick={handleSamplePDF}
+                    className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6 hover:border-blue-400 hover:from-blue-100 hover:to-indigo-100 transition-all duration-200 flex items-center justify-center gap-3 group"
+                  >
+                    <FileText className="w-8 h-8 text-blue-600 group-hover:text-blue-700" />
+                    <div className="text-left">
+                      <p className="font-semibold text-gray-900 group-hover:text-blue-700">Use Sample PDF</p>
+                      <p className="text-sm text-gray-600">Click to analyze a demo bank statement</p>
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
