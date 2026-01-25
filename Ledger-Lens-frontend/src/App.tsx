@@ -232,10 +232,6 @@ function App() {
               netCashFlowStability: resultsData.analytics?.net_cash_flow_stability,
               totalForeignTransactions: resultsData.analytics?.total_foreign_transactions,
               totalForeignAmount: resultsData.analytics?.total_foreign_amount,
-              totalForeignInwardCount: resultsData.analytics?.total_foreign_inward_count,
-              totalForeignInwardAmount: resultsData.analytics?.total_foreign_inward_amount,
-              totalForeignOutwardCount: resultsData.analytics?.total_foreign_outward_count,
-              totalForeignOutwardAmount: resultsData.analytics?.total_foreign_outward_amount,
               overdraftFrequency: resultsData.analytics?.overdraft_frequency,
               overdraftTotalDays: resultsData.analytics?.overdraft_total_days,
               sum_total_inflow: resultsData.analytics?.sum_total_inflow,
@@ -408,10 +404,6 @@ function App() {
                   netCashFlowStability: resultsData.analytics?.net_cash_flow_stability,
                   totalForeignTransactions: resultsData.analytics?.total_foreign_transactions,
                   totalForeignAmount: resultsData.analytics?.total_foreign_amount,
-                  totalForeignInwardCount: resultsData.analytics?.total_foreign_inward_count,
-                  totalForeignInwardAmount: resultsData.analytics?.total_foreign_inward_amount,
-                  totalForeignOutwardCount: resultsData.analytics?.total_foreign_outward_count,
-                  totalForeignOutwardAmount: resultsData.analytics?.total_foreign_outward_amount,
                   overdraftFrequency: resultsData.analytics?.overdraft_frequency,
                   overdraftTotalDays: resultsData.analytics?.overdraft_total_days,
                   sum_total_inflow: resultsData.analytics?.sum_total_inflow,
@@ -704,7 +696,7 @@ function App() {
             />
             <StatCard
               title="Foreign Transactions"
-              value={`${analytics?.totalForeignTransactions || 0} (${formatCurrency(analytics?.totalForeignAmount || 0)}), Inward: ${analytics?.totalForeignInwardCount || 0} (${formatCurrency(analytics?.totalForeignInwardAmount || 0)}), Outward: ${analytics?.totalForeignOutwardCount || 0} (${formatCurrency(analytics?.totalForeignOutwardAmount || 0)})`}
+              value={`${analytics?.totalForeignTransactions || 0} (${formatCurrency(analytics?.totalForeignAmount || 0)})`}
               icon={Globe}
               color="text-purple-600"
             />
