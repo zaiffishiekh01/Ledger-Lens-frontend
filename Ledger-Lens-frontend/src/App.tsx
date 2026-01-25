@@ -473,7 +473,7 @@ function App() {
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
               <div className="flex items-center justify-center gap-4 mb-4">
-                <img src={logo} alt="LedgerLens Logo" className="h-24 w-auto" />
+                <img src={logo} alt="LedgerLens Logo" className="h-18 w-auto" />
                 <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
               </div>
               <p className="text-lg text-gray-600">Automate Analyze Act</p>
