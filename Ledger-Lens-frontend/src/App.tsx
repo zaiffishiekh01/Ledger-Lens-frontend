@@ -473,7 +473,7 @@ function App() {
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
               <div className="flex items-center justify-center gap-4 mb-4">
-                <img src={logo} alt="LedgerLens Logo" className="h-12 w-auto" />
+                <img src={logo} alt="LedgerLens Logo" className="h-16 w-auto" />
                 <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
               </div>
               <p className="text-lg text-gray-600">Automate Analyze Act</p>
@@ -580,7 +580,7 @@ function App() {
           <div className="flex items-center justify-between">
             <div className="flex-1"></div>
             <div className="text-center flex items-center justify-center gap-3">
-              <img src={logo} alt="LedgerLens Logo" className="h-10 w-auto" />
+              <img src={logo} alt="LedgerLens Logo" className="h-14 w-auto" />
               <div>
                 <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
                 <p className="text-sm text-gray-600 mt-1">Automate Analyze Act</p>
