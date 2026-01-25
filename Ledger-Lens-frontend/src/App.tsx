@@ -580,7 +580,7 @@ function App() {
           <div className="flex items-center justify-between">
             <div className="flex-1"></div>
             <div className="text-center flex items-center justify-center gap-3">
-              <img src={logo} alt="LedgerLens Logo" className="h-18 w-auto" />
+              <img src={logo} alt="LedgerLens Logo" className="h-20 w-auto" />
               <div>
                 <h1 className="text-4xl font-bold text-gray-900">LedgerLens</h1>
                 <p className="text-sm text-gray-600 mt-1">Automate Analyze Act</p>
