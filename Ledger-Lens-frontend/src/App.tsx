@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useDropzone } from 'react-dropzone';
 import logo from './assets/logo.png';
 import LoginPage from './components/LoginPage';
+import SetupPasscodePage from './components/SetupPasscodePage';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
@@ -58,6 +59,8 @@ function App() {
     currentPdfIdRef.current = null;
   };
 
+  const [passcodeSetupRequired, setPasscodeSetupRequired] = useState<boolean | null>(null);
+
   // Check authentication status on mount
   useEffect(() => {
     const checkAuth = async () => {
@@ -67,8 +70,10 @@ function App() {
         });
         const data = await response.json();
         setIsAuthenticated(data.authenticated || false);
+        setPasscodeSetupRequired(data.passcode_setup_required || false);
       } catch (err) {
         setIsAuthenticated(false);
+        setPasscodeSetupRequired(false);
       }
     };
     checkAuth();
@@ -489,12 +494,32 @@ function App() {
   );
 
   // Show loading while checking auth
-  if (isAuthenticated === null) {
+  if (isAuthenticated === null || passcodeSetupRequired === null) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
+  }
+
+  // Show setup page if passcode not set up
+  if (passcodeSetupRequired) {
+    return <SetupPasscodePage onSetupSuccess={() => {
+      setPasscodeSetupRequired(false);
+      // After setup, check auth status again
+      const checkAuth = async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/pdf/auth/status/`, {
+            credentials: 'include',
+          });
+          const data = await response.json();
+          setPasscodeSetupRequired(data.passcode_setup_required || false);
+        } catch (err) {
+          setPasscodeSetupRequired(false);
+        }
+      };
+      checkAuth();
+    }} />;
   }
 
   // Show login page if not authenticated

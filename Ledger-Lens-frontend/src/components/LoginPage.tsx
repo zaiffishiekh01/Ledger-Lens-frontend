@@ -8,12 +8,30 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
-  const [passcode, setPasscode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+
+  // Check lockout status from backend on mount
+  useEffect(() => {
+    const checkBackendLockout = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/pdf/auth/status/`, {
+          credentials: 'include',
+        });
+        const data = await response.json();
+        if (data.passcode_locked && data.passcode_lockout_minutes) {
+          const until = new Date(Date.now() + data.passcode_lockout_minutes * 60 * 1000);
+          setLockoutUntil(until);
+        }
+      } catch (err) {
+        // Ignore errors, continue with normal flow
+      }
+    };
+    checkBackendLockout();
+  }, []);
 
   useEffect(() => {
     // Check lockout status on mount
@@ -53,13 +71,16 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             const minutes = parseInt(match[1]);
             const until = new Date(Date.now() + minutes * 60 * 1000);
             setLockoutUntil(until);
+            setRemainingAttempts(null); // Clear attempts when locked
           }
         } else if (data.error?.includes('attempts remaining')) {
-          // Extract remaining attempts
+          // Extract remaining attempts (only if not locked)
           const match = data.error?.match(/(\d+)\s+attempts/);
           if (match) {
             setRemainingAttempts(parseInt(match[1]));
           }
+        } else {
+          setRemainingAttempts(null); // Clear attempts on other errors
         }
         setError(data.error || 'Invalid passcode');
         setLoading(false);
@@ -108,7 +129,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             </div>
           )}
 
-          {remainingAttempts !== null && remainingAttempts > 0 && (
+          {remainingAttempts !== null && remainingAttempts > 0 && !remainingMinutes && (
             <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
               <p className="text-sm text-yellow-800 font-medium text-center">
                 {remainingAttempts} attempts remaining

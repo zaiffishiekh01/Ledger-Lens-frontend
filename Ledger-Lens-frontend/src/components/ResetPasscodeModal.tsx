@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 
 interface ResetPasscodeModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   onSuccess: () => void;
 }
 
@@ -16,6 +16,41 @@ export default function ResetPasscodeModal({ isOpen, onClose, onSuccess }: Reset
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null);
+
+  // Check lockout status from backend on mount and when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const checkBackendLockout = async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/pdf/auth/status/`, {
+            credentials: 'include',
+          });
+          const data = await response.json();
+          if (data.creds_locked && data.creds_lockout_minutes) {
+            const until = new Date(Date.now() + data.creds_lockout_minutes * 60 * 1000);
+            setLockoutUntil(until);
+          }
+        } catch (err) {
+          // Ignore errors
+        }
+      };
+      checkBackendLockout();
+    }
+  }, [isOpen]);
+
+  // Update lockout countdown
+  useEffect(() => {
+    const checkLockout = () => {
+      if (lockoutUntil) {
+        const now = new Date();
+        if (now >= lockoutUntil) {
+          setLockoutUntil(null);
+        }
+      }
+    };
+    const interval = setInterval(checkLockout, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
 
   if (!isOpen) return null;
 
@@ -79,7 +114,9 @@ export default function ResetPasscodeModal({ isOpen, onClose, onSuccess }: Reset
       setNewPasscode('');
       setConfirmPasscode('');
       onSuccess();
-      onClose();
+      if (onClose) {
+        onClose();
+      }
     } catch (err) {
       setError('Network error. Please try again.');
     } finally {

@@ -1,4 +1,4 @@
-import { useRef, useState, KeyboardEvent, ChangeEvent } from 'react';
+import { useRef, useState, KeyboardEvent, ChangeEvent, useEffect } from 'react';
 
 interface PasscodeInputProps {
   length?: number;
@@ -15,6 +15,18 @@ export default function PasscodeInput({
 }: PasscodeInputProps) {
   const [values, setValues] = useState<string[]>(Array(length).fill(''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Auto-focus last input when error occurs
+  useEffect(() => {
+    if (error) {
+      const lastIndex = length - 1;
+      const lastFilledIndex = values.findLastIndex(v => v !== '');
+      const focusIndex = lastFilledIndex >= 0 ? lastFilledIndex : lastIndex;
+      setTimeout(() => {
+        inputRefs.current[focusIndex]?.focus();
+      }, 0);
+    }
+  }, [error, length, values]);
 
   const handleChange = (index: number, value: string) => {
     if (disabled) return;
@@ -41,8 +53,19 @@ export default function PasscodeInput({
     if (disabled) return;
 
     // Handle backspace
-    if (e.key === 'Backspace' && !values[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
+    if (e.key === 'Backspace') {
+      if (values[index]) {
+        // If current field has value, clear it
+        const newValues = [...values];
+        newValues[index] = '';
+        setValues(newValues);
+      } else if (index > 0) {
+        // If current field is empty, go to previous and clear it
+        const newValues = [...values];
+        newValues[index - 1] = '';
+        setValues(newValues);
+        inputRefs.current[index - 1]?.focus();
+      }
     }
   };
 
