@@ -3,6 +3,7 @@ import { Upload, FileText, TrendingUp, TrendingDown, DollarSign, Calendar, Globe
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { useDropzone } from 'react-dropzone';
 import logo from './assets/logo.png';
+import LoginPage from './components/LoginPage';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
@@ -35,6 +36,7 @@ function mapMonthlyStats(month: string, stats: any) {
 }
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -55,6 +57,22 @@ function App() {
     }
     currentPdfIdRef.current = null;
   };
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/pdf/auth/status/`, {
+          credentials: 'include',
+        });
+        const data = await response.json();
+        setIsAuthenticated(data.authenticated || false);
+      } catch (err) {
+        setIsAuthenticated(false);
+      }
+    };
+    checkAuth();
+  }, []);
 
   // Cleanup only when browser/tab is actually closing (not on component unmount)
   useEffect(() => {
@@ -85,6 +103,10 @@ function App() {
       window.removeEventListener('pagehide', handleBeforeUnload);
     };
   }, []);
+
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+  };
 
   const handleSamplePDF = async () => {
     try {
@@ -466,6 +488,20 @@ function App() {
     </div>
   );
 
+  // Show loading while checking auth
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
   if (!showResults) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -586,7 +622,23 @@ function App() {
                 <p className="text-sm text-gray-600 mt-1">Automate Analyze Act</p>
               </div>
             </div>
-            <div className="flex-1 flex justify-end">
+            <div className="flex-1 flex justify-end gap-3">
+              <button 
+                onClick={async () => {
+                  try {
+                    await fetch(`${import.meta.env.VITE_API_URL}/api/pdf/auth/logout/`, {
+                      method: 'POST',
+                      credentials: 'include',
+                    });
+                  } catch (err) {
+                    // Ignore errors
+                  }
+                  setIsAuthenticated(false);
+                }}
+                className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Logout
+              </button>
               <button 
                 onClick={() => setShowResults(false)}
                 className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
